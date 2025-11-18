@@ -38,12 +38,38 @@ if(ENABLE_YAML)
     find_package(yaml-cpp QUIET)
 endif()
 
+
+# Options
+option(ENABLE_OSQP "Enable OSQP-based MPC" ON)
+
+if(ENABLE_OSQP)
+  # Try CMake package first
+  find_package(osqp QUIET)
+  if(osqp_FOUND)
+    message(STATUS "Found OSQP via CMake")
+    set(OSQP_LIB osqp::osqp)
+  else()
+    # Fallback: pkg-config (common on Linux)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+      pkg_check_modules(OSQP QUIET osqp)
+      if(OSQP_FOUND)
+        include_directories(${OSQP_INCLUDE_DIRS})
+        link_directories(${OSQP_LIBRARY_DIRS})
+        set(OSQP_LIB ${OSQP_LIBRARIES})
+        message(STATUS "Found OSQP via pkg-config")
+      endif()
+    endif()
+  endif()
+endif()
+
 add_library(core
     src/bicycle_model.cpp
     src/lqr.cpp
     src/mpc.cpp
     src/trajectory.cpp
     src/util.cpp
+    src/mpc_osqp.cpp
 )
 
 target_include_directories(core PUBLIC include)
@@ -61,6 +87,12 @@ endif()
 if(ENABLE_YAML AND yaml-cpp_FOUND)
     target_compile_definitions(core PUBLIC HAVE_YAML)
     target_link_libraries(core PUBLIC yaml-cpp)
+endif()
+
+# Link OSQP if present
+if(ENABLE_OSQP AND OSQP_LIB)
+  target_compile_definitions(core PUBLIC HAVE_OSQP)
+  target_link_libraries(core PUBLIC ${OSQP_LIB})
 endif()
 
 add_executable(sim src/main.cpp)

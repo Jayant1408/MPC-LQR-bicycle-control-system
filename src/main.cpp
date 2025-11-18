@@ -8,6 +8,7 @@
 #include "mpc.hpp"
 #include "trajectory.hpp"
 #include "util.hpp"
+#include "mpc_osqp.hpp"  
 
 /**
  * Helper function to normalize an angle to the range [-pi, pi]
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     // If the LQR Riccati equation did not converge, print a warning
     if (!ok) std::cerr << "[WARN] LQR Riccati did not converge; using zeros.\n";
 
+    
     // Build the MPC controller
     MPCController mpc;
     // Configure the MPC controller
@@ -119,8 +121,41 @@ int main(int argc, char** argv)
 
         Eigen::Vector4d e; e << e_lon, e_lat, e_yaw, ev;
 
+        MPCControllerOSQP mpc_osqp;
+        #ifdef HAVE_OSQP
+        MPCOSQPConfig oc;
+        oc.N = cfg.N;
+        oc.dt = cfg.dt; oc.L = cfg.veh.L; oc.v_ref = cfg.v_ref;
+        oc.Q = Ql; oc.R = Rl;
+        oc.Rd = Eigen::Matrix2d::Identity() * 0.05; // tune
+        oc.max_accel = cfg.veh.max_accel;
+        oc.max_steer = cfg.veh.max_steer;
+        oc.max_da = 0.5; oc.max_dd = 0.2; // rate limits per step
+        mpc_osqp.configure(oc);
+        #endif
+        Eigen::Vector2d u_prev(0.0, 0.0);
         Control u;
-        if(cfg.ctrl_mode == "MPC")
+        // inside the main loop, replace the controller section:
+        if (cfg.ctrl_mode == "MPC_OSQP") {
+            // Build Uff over horizon from reference curvature
+            Eigen::Matrix<double,2,Eigen::Dynamic> Uff(2, cfg.N);
+            for (int i = 0; i < cfg.N; ++i) {
+                int j = std::min(k + i, cfg.steps - 1);
+                double yaw_now  = ref[j].yaw;
+                double yaw_next = ref[std::min(j + 1, cfg.steps - 1)].yaw;
+                double dyaw = normalizeAngle(yaw_next - yaw_now);
+                double ds = std::max(1e-6, ref[j].v * cfg.dt);
+                double kappa = dyaw / ds;
+                double delta_ff = std::atan(cfg.veh.L * kappa);
+                Uff(0,i) = 0.0;        // accel FF (could track dv/dt if v_ref varies)
+                Uff(1,i) = delta_ff;
+            }
+            Eigen::Vector2d uu = mpc_osqp.solve(e, Uff, u_prev);
+            u.a = uu(0);
+            u.delta = uu(1);
+            u_prev = uu;
+        }
+        else if(cfg.ctrl_mode == "MPC")
         {
             Eigen::Vector2d uu = mpc.solve(e);
             u.a = uu(0);

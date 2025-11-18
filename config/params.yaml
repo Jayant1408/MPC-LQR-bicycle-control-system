@@ -1,0 +1,2 @@
+controller:
+  mode: "MPC_OSQP"   # LQR | MPC | MPC_OSQP
