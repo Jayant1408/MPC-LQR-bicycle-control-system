@@ -1,0 +1,2 @@
+source;share/mpc_path_replayer/environment/ament_prefix_path.sh
+source;share/mpc_path_replayer/environment/path.sh

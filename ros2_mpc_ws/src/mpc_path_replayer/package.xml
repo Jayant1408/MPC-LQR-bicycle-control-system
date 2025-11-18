@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mpc_path_replayer</name>
+  <version>0.0.1</version>
+  <description>Replay MPC and reference trajectories in RViz</description>
+
+  <maintainer email="you@example.com">Jayant</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+
+
+  <export/>
+</package>
