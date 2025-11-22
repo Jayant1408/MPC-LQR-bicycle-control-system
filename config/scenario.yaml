@@ -1,0 +1,21 @@
+sim:
+  dt: 0.05
+  steps: 800
+  log_every: 1
+
+vehicle:
+  L: 2.7
+  max_steer: 0.6
+  max_accel: 2.5
+  max_speed: 20.0
+
+controller:
+  mode: "MPC"   # or "MPC", "LQR"
+  # mode: "MPC_OSQP"   # or "MPC", "LQR"
+
+trajectory:
+  # type: "lanechange" # "straight", "circle", "figure8", "lanechange"
+  type: "circle" # "straight", "circle", "figure8", "lanechange"
+  radius: 10.0       # used for circle / figure8
+  length: 10.0       # used for lanechange
+  lane_width: 3.5    # lanechange only
