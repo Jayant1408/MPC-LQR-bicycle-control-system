@@ -10,6 +10,115 @@
 #include "util.hpp"
 #include "mpc_osqp.hpp"  
 
+// -------------------------------------------------------------
+// Scenario enumeration + helpers for reference generation
+// -------------------------------------------------------------
+enum class Scenario { Straight, Circle, Figure8, LaneChange };
+
+Scenario scenarioFromString(const std::string& s)
+{
+    if (s == "straight")     return Scenario::Straight;
+    if (s == "circle")       return Scenario::Circle;
+    if (s == "figure8")      return Scenario::Figure8;
+    if (s == "lanechange" ||
+        s == "lane_change")  return Scenario::LaneChange;
+    return Scenario::Straight;
+}
+
+// Generate reference trajectory for different scenarios, driven by SimConfig
+std::vector<RefPoint> generateReference(Scenario scenario,
+                                        double total_time,
+                                        double dt,
+                                        double v_ref,
+                                        const SimConfig& cfg)
+{
+    int steps = static_cast<int>(std::round(total_time / dt));
+    std::vector<RefPoint> ref;
+    ref.reserve(steps + 1);
+
+    for (int k = 0; k <= steps; ++k) {
+        double t = k * dt;
+        double x_ref = 0.0;
+        double y_ref = 0.0;
+        double yaw_ref = 0.0;
+        double v = v_ref;
+
+        switch (scenario) {
+
+        case Scenario::Straight:
+            // Along x-axis
+            x_ref = v_ref * t;
+            y_ref = 0.0;
+            yaw_ref = 0.0;
+            break;
+
+        case Scenario::Circle: {
+            double R = cfg.radius;          // from YAML
+            double omega = v_ref / R;       // yaw rate
+            double theta = omega * t;
+            x_ref = R * std::cos(theta);
+            y_ref = R * std::sin(theta);
+            yaw_ref = theta + M_PI / 2.0;   // tangent direction
+            break;
+        }
+
+        case Scenario::Figure8: {
+            // Simple lemniscate-like path; size controlled by cfg.radius
+            double R = cfg.radius;
+            double w = v_ref / R;
+            double s = w * t;
+
+            x_ref = R * std::sin(s);
+            y_ref = R * std::sin(s) * std::cos(s);
+
+            // Approximate tangent for heading
+            double dx = R * std::cos(s);
+            double dy = R * (std::cos(s)*std::cos(s) - std::sin(s)*std::sin(s));
+            yaw_ref = std::atan2(dy, dx);
+            break;
+        }
+
+        case Scenario::LaneChange: {
+            double L = cfg.length;          // from YAML
+            double W = cfg.lane_width;      // from YAML
+            double s = v_ref * t;           // longitudinal distance
+
+            // 3 segments: straight — smooth shift — straight
+            if (s < L) {
+                x_ref = s;
+                y_ref = 0.0;
+                yaw_ref = 0.0;
+            } else if (s < 2.0 * L) {
+                double u = (s - L) / L;     // 0 → 1
+                x_ref = s;
+                y_ref = W * 0.5 * (1.0 - std::cos(M_PI * u)); // cosine lane change
+
+                double dy_ds = W * 0.5 * (M_PI / L) * std::sin(M_PI * u);
+                double dx_ds = 1.0;
+                yaw_ref = std::atan2(dy_ds, dx_ds);
+            } else {
+                x_ref = s;
+                y_ref = W;
+                yaw_ref = 0.0;
+            }
+            break;
+        }
+
+        } // switch
+
+        RefPoint p;
+        p.x   = x_ref;
+        p.y   = y_ref;
+        p.yaw = yaw_ref;
+        p.v   = v;
+        ref.push_back(p);
+    }
+
+    return ref;
+}
+
+
+
 /**
  * Helper function to normalize an angle to the range [-pi, pi]
  * @param a The angle to normalize
@@ -29,7 +138,8 @@ static double normalizeAngle(double a) {
  */
 int main(int argc, char** argv)
 {
-    std::string cfg_path = (argc > 1) ? std::string(argv[1]) : std::string("");
+    // Default to config/scenario.yaml if no path provided
+    std::string cfg_path = (argc > 1) ? std::string(argv[1]) : std::string("config/scenario.yaml");
 
     // Load configuration from file
     SimConfig cfg;
@@ -44,13 +154,13 @@ int main(int argc, char** argv)
 
     // Reference trajectory
     // Generate the reference trajectory based on the configuration
+    // Reference trajectory based on SimConfig
     std::vector<RefPoint> ref;
-    // Generate a circle trajectory
-    if(cfg.traj_type == "circle") ref = Trajectory::circle(cfg.radius, cfg.v_ref, cfg.dt, cfg.steps);
-    // Generate a lane change trajectory
-    else if (cfg.traj_type == "lanechange") ref = Trajectory::laneChange(cfg.length, cfg.v_ref, cfg.dt, cfg.steps);
-    // Generate a figure 8 trajectory
-    else ref = Trajectory::figure8(cfg.radius, cfg.v_ref, cfg.dt, cfg.steps);
+    Scenario scenario = scenarioFromString(cfg.traj_type);
+    double total_time = cfg.steps * cfg.dt;
+
+    ref = generateReference(scenario, total_time, cfg.dt, cfg.v_ref, cfg);
+
 
     // Controllers
     LQRController lqr;

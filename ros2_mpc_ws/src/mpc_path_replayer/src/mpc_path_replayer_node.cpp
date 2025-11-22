@@ -38,17 +38,21 @@ public:
         this->declare_parameter<std::string>("actual_csv_path", "/data/output_mpc.csv");
         this->declare_parameter<std::string>("ref_csv_path", "/data/output_ref.csv");
         this->declare_parameter<std::string>("lqr_csv_path", "/data/output_lqr.csv");
+        this->declare_parameter<std::string>("scenario_yaml_path", "/data/config/scenario.yaml");
         this->declare_parameter<double>("playback_rate", 1.0);
         this->declare_parameter<bool>("loop", false);
 
         this->get_parameter("actual_csv_path", actual_csv_path_);
         this->get_parameter("ref_csv_path", ref_csv_path_);
         this->get_parameter("lqr_csv_path", lqr_csv_path_);
+        this->get_parameter("scenario_yaml_path", scenario_yaml_path_);
         this->get_parameter("playback_rate", playback_rate_);
         this->get_parameter("loop", loop_);
 
         RCLCPP_INFO(get_logger(), "Actual CSV: %s", actual_csv_path_.c_str());
         RCLCPP_INFO(get_logger(), "Ref CSV:    %s", ref_csv_path_.c_str());
+        RCLCPP_INFO(get_logger(), "LQR CSV:    %s", lqr_csv_path_.c_str());
+        RCLCPP_INFO(get_logger(), "Scenario YAML: %s", scenario_yaml_path_.c_str());
 
         if (!load_csv(actual_csv_path_, actual_samples_, true)) {
             RCLCPP_FATAL(get_logger(), "Failed to load actual trajectory CSV");
@@ -348,6 +352,7 @@ private:
     std::string actual_csv_path_;
     std::string ref_csv_path_;
     std::string lqr_csv_path_;
+    std::string scenario_yaml_path_;
 
 
     // Data
